@@ -11,6 +11,8 @@ public import WordRAM.Memory
 public import WordRAM.Logic
 public import WordRAM.Layout
 public import WordRAM.CopyWords
+public import WordRAM.Entry
+public import WordRAM.Tactic
 
 -- Running a whole program inside another one.
 public import WordRAM.LinkDefs

@@ -41,6 +41,8 @@ halts on `input` with output `out` after `cost` steps.
 | `WordRAM/Contract.lean` | `Contract`, `MeetsContract` (for every outcome of the random bits), `MeetsProbContract` (with a failure probability), `Program.HasAt` for programs assembled from modules |
 | `WordRAM/Exec.lean`, `Expr.lean`, `Memory.lean` | execution lemmas, expression evaluation, memory layouts (`ListAt`, `ZeroFrom`) |
 | `WordRAM/Logic.lean` | `Triple`, a Hoare triple with a cost bound; rules for every statement, counter and measure loops (`forRange`, `forUp`, `Triple.loop_measure`), and the bridges `meetsContract_of_triple` and `meetsContract_of_runs`. Its header is a guide to proving a procedure. |
+| `WordRAM/Entry.lean` | from procedure `0` to `RunsTo` (`runsTo_of_entry`), the initial memory, and what fits in a word at `wordSize c input` |
+| `WordRAM/Tactic.lean` | symbolic execution: `wram_step` and `wram_run` step through a body (expressions, overflow side conditions, branches, calls by contract), `wram_cost` closes the cost inequality; `meetsContract_of_rec` for recursive procedures |
 | `WordRAM/Layout.lean` | length-prefixed lists, tables, and `heapContract` for procedures that allocate |
 | `WordRAM/CopyWords.lean` | a verified procedure that copies a block of memory |
 | `WordRAM/LinkDefs.lean`, `Link.lean` | `runner Q c b`: run a whole program `Q`, proved on its own, as a procedure of a larger program (`runner_spec`) |
