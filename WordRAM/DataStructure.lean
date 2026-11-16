@@ -11,8 +11,9 @@ answer questions about it. The user of a data structure sees only its abstract s
 of a type `σ` chosen by the specification (a graph under deletions, a forest, a set, …).
 `DataStructure σ` says, in terms of this state, what each call may assume, what it must achieve,
 and what it may cost. How the state is kept in memory is the implementation's choice and stays
-hidden: `DSRep σ` gives the representation, the potential and the footprint, and
-`DSRep.Implements` says that procedures of a program meet the specification with it.
+hidden: `DSRep σ` gives a type of concrete states (where things are in memory), the
+representation, the potential and the footprint, and `DSRep.Implements` says that procedures of a
+program meet the specification with it.
 
 **Handles.** A state is named by its handle: the heap pointer with which the initialization that
 created it was called. Every operation takes the handle as its first argument.
@@ -21,8 +22,9 @@ created it was called. Every operation takes the handle as its first argument.
 the heap pointer `h`, memory from `h` on is zero, and it returns a new heap pointer `h'` with
 `h ≤ h' ≤ h + space` (the space bound of the call), leaving memory from `h'` on zero. Its answer,
 if it has one, is in memory where the specification says. The state occupies a set of cells, its
-footprint, which lies below the heap pointer. A call writes only to the footprint of the state it
-starts from and to the new cells from `h` to `h'`, and the new footprint lies in these cells. So
+footprint, which lies below the heap pointer and depends on the concrete state, so it can grow
+from call to call. A call writes only to the footprint of the state it starts from and to the new
+cells from `h` to `h'`, and the new footprint lies in these cells. So
 the data a user keeps in cells it allocated itself is never changed by a call, and a state
 survives everything the user writes to its own cells (`DSRep.Local`). Several states, of the same
 or of different data structures, can live in one memory.
@@ -61,13 +63,15 @@ structure DataStructure (σ : Type) where
   cost : ℕ → σ → List ℕ → (ℕ → ℕ) → ℕ
   space : ℕ → σ → List ℕ → (ℕ → ℕ) → ℕ
 
-/-- How an implementation keeps states in memory: `rep b s mem` says that memory `mem` holds state
-`s` with handle `b`, `phi b s mem` is its potential, and `foot b s` is the set of cells that hold
-it. -/
+/-- How an implementation keeps states in memory. A concrete state `x : τ` records what the
+implementation needs to know about its memory, such as where its blocks are. `rep b s x mem` says
+that memory `mem` holds the abstract state `s` with handle `b` as the concrete state `x`,
+`phi b x mem` is the potential, and `foot b x` is the set of cells that hold it. -/
 structure DSRep (σ : Type) where
-  rep : ℕ → σ → (ℕ → ℕ) → Prop
-  phi : ℕ → σ → (ℕ → ℕ) → ℕ
-  foot : ℕ → σ → ℕ → Prop
+  τ : Type
+  rep : ℕ → σ → τ → (ℕ → ℕ) → Prop
+  phi : ℕ → τ → (ℕ → ℕ) → ℕ
+  foot : ℕ → τ → ℕ → Prop
 
 namespace DSRep
 
@@ -75,23 +79,24 @@ variable {σ : Type}
 
 /-- A state and its potential depend only on the cells of its footprint. -/
 def Local (R : DSRep σ) : Prop :=
-  ∀ b s mem mem', (∀ a, R.foot b s a → mem a = mem' a) →
-    (R.rep b s mem → R.rep b s mem') ∧ R.phi b s mem = R.phi b s mem'
+  ∀ b s x mem mem', (∀ a, R.foot b x a → mem a = mem' a) →
+    (R.rep b s x mem → R.rep b s x mem') ∧ R.phi b x mem = R.phi b x mem'
 
 /-- A call that starts with heap pointer `h` in memory `mem`, where the cells `old` hold the state
-it starts from, and ends with the state `s'` of handle `b` in memory `mem'`, returning the new heap pointer
+it starts from, and ends with the concrete state `x'` of handle `b` in memory `mem'`, returning the new heap pointer
 `h'`, respects memory: `h ≤ h' ≤ h + space`, memory from `h'` on is zero, cells below `h` outside
 `old` are unchanged, and the new footprint lies in `old` and the new cells. -/
-def Respects (R : DSRep σ) (old : ℕ → Prop) (h space : ℕ) (mem : ℕ → ℕ) (h' b : ℕ) (s' : σ)
+def Respects (R : DSRep σ) (old : ℕ → Prop) (h space : ℕ) (mem : ℕ → ℕ) (h' b : ℕ) (x' : R.τ)
     (mem' : ℕ → ℕ) : Prop :=
   h ≤ h' ∧ h' ≤ h + space ∧ ZeroFrom mem' h' ∧ (∀ a < h, ¬ old a → mem' a = mem a) ∧
-    ∀ a, R.foot b s' a → old a ∨ (h ≤ a ∧ a < h')
+    ∀ a, R.foot b x' a → old a ∨ (h ≤ a ∧ a < h')
 
 /-- Procedures `init` and `op 0, op 1, …` of program `p` implement the data structure `D` at
 word size `w` with the representation `R`. States are local (`Local`). From memory that meets the
 precondition, with memory from the heap pointer on zero and room for the space bound below
-`2 ^ w`, every call ends, for every sequence of random bits, in a state `s'` that memory holds,
-meeting the postcondition, respecting memory, and within its amortized bound. The state created
+`2 ^ w`, every call ends, for every sequence of random bits, in a state `s'` that memory holds
+(as some concrete state `x'`), meeting the postcondition, respecting memory, and within its
+amortized bound. The state created
 by the initialization has the heap pointer of the call as its handle. An operation, called with
 the handle `b` of its state as first argument, also assumes that memory holds the state and that
 its footprint lies below the heap pointer. -/
@@ -101,20 +106,20 @@ def Implements (R : DSRep σ) (w : ℕ) (p : Program) (init : ℕ) (op : ℕ →
   (∀ args mem pos ω, (∀ a ∈ args, a < 2 ^ w) → D.initPre args mem →
     ZeroFrom mem (heapArg args) → heapArg args + D.initSpace args mem < 2 ^ w →
     ∃ body, p.procs[init]? = some body ∧ ∃ o st' c,
-      Runs w p ω body (startState args mem pos) o st' c ∧ ∃ s',
-        R.rep (heapArg args) s' st'.mem ∧ D.initPost args mem s' st'.mem ∧
+      Runs w p ω body (startState args mem pos) o st' c ∧ ∃ s' x',
+        R.rep (heapArg args) s' x' st'.mem ∧ D.initPost args mem s' st'.mem ∧
         R.Respects (fun _ => False) (heapArg args) (D.initSpace args mem) mem o.value
-          (heapArg args) s' st'.mem ∧
-        c + R.phi (heapArg args) s' st'.mem ≤ D.initCost args mem) ∧
-  (∀ i b s args mem pos ω, (∀ a ∈ args, a < 2 ^ w) → args.head? = some b → R.rep b s mem →
-    D.pre i s args mem → (∀ a, R.foot b s a → a < heapArg args) → ZeroFrom mem (heapArg args) →
-    heapArg args + D.space i s args mem < 2 ^ w →
+          (heapArg args) x' st'.mem ∧
+        c + R.phi (heapArg args) x' st'.mem ≤ D.initCost args mem) ∧
+  (∀ i b s x args mem pos ω, (∀ a ∈ args, a < 2 ^ w) → args.head? = some b →
+    R.rep b s x mem → D.pre i s args mem → (∀ a, R.foot b x a → a < heapArg args) →
+    ZeroFrom mem (heapArg args) → heapArg args + D.space i s args mem < 2 ^ w →
     ∃ body, p.procs[op i]? = some body ∧ ∃ o st' c,
-      Runs w p ω body (startState args mem pos) o st' c ∧ ∃ s',
-        R.rep b s' st'.mem ∧ D.post i s args mem s' st'.mem ∧
-        R.Respects (R.foot b s) (heapArg args) (D.space i s args mem) mem o.value b s'
+      Runs w p ω body (startState args mem pos) o st' c ∧ ∃ s' x',
+        R.rep b s' x' st'.mem ∧ D.post i s args mem s' st'.mem ∧
+        R.Respects (R.foot b x) (heapArg args) (D.space i s args mem) mem o.value b x'
           st'.mem ∧
-        c + R.phi b s' st'.mem ≤ D.cost i s args mem + R.phi b s mem)
+        c + R.phi b x' st'.mem ≤ D.cost i s args mem + R.phi b x mem)
 
 end DSRep
 
