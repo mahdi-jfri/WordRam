@@ -14,6 +14,9 @@ public import WordRAM.CopyWords
 public import WordRAM.Entry
 public import WordRAM.Tactic
 
+-- Data structures: procedures that keep a state in memory between calls.
+public import WordRAM.DataStructure
+
 -- Running a whole program inside another one.
 public import WordRAM.LinkDefs
 public import WordRAM.Link
